@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PBKDF2-SHA256</title>
+<style>
+  body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+  label { display: block; margin-top: 12px; }
+  input { width: 100%; padding: 6px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 8px 16px; }
+  .row { display: flex; gap: 8px; align-items: stretch; margin: 8px 0; }
+  .row pre { flex: 1; margin: 0; min-height: 1.2em; }
+  .row button.copy { margin: 0; width: 80px; flex-shrink: 0; }
+  .part-label { margin-top: 12px; }
+  .part-label input { width: 80px; padding: 2px 4px; }
+  pre { background: #f0f0f0; padding: 10px; word-break: break-all; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>PBKDF2-SHA256</h1>
+
+<label>Input string
+  <input id="password" type="text">
+</label>
+<label>Salt
+  <input id="salt" type="text" value="salt">
+</label>
+<label>Iterations
+  <input id="iterations" type="number" value="100000" min="1">
+</label>
+<label>Output length (bytes)
+  <input id="length" type="number" value="32" min="1">
+</label>
+
+<button id="go">Generate</button>
+
+<h3>Hex</h3>
+<div class="row"><pre id="hex"></pre><button class="copy" data-target="hex">Copy</button></div>
+<div class="part-label">First <input id="hex-len" type="number" min="1"> characters</div>
+<div class="row"><pre id="hex-preview"></pre><button class="copy" data-target="hex-preview">Copy</button></div>
+
+<h3>Base64</h3>
+<div class="row"><pre id="b64"></pre><button class="copy" data-target="b64">Copy</button></div>
+<div class="part-label">First <input id="b64-len" type="number" min="1"> characters</div>
+<div class="row"><pre id="b64-preview"></pre><button class="copy" data-target="b64-preview">Copy</button></div>
+
+<script>
+async function pbkdf2(password, salt, iterations, lengthBytes) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: enc.encode(salt), iterations: iterations },
+    key,
+    lengthBytes * 8
+  );
+  return new Uint8Array(bits);
+}
+
+document.getElementById("go").addEventListener("click", async function () {
+  const hexOut = document.getElementById("hex");
+  const b64Out = document.getElementById("b64");
+  try {
+    const bytes = await pbkdf2(
+      document.getElementById("password").value,
+      document.getElementById("salt").value,
+      parseInt(document.getElementById("iterations").value, 10),
+      parseInt(document.getElementById("length").value, 10)
+    );
+    hexOut.textContent = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    b64Out.textContent = btoa(String.fromCharCode(...bytes));
+    updatePreview("hex");
+    updatePreview("b64");
+  } catch (e) {
+    hexOut.textContent = "Error: " + e.message;
+    b64Out.textContent = "";
+    updatePreview("hex");
+    updatePreview("b64");
+  }
+});
+
+function updatePreview(target) {
+  const text = document.getElementById(target).textContent;
+  const n = parseInt(document.getElementById(target + "-len").value, 10);
+  document.getElementById(target + "-preview").textContent = n > 0 ? text.slice(0, n) : "";
+}
+
+["hex", "b64"].forEach(function (target) {
+  document.getElementById(target + "-len").addEventListener("input", function () {
+    updatePreview(target);
+  });
+});
+
+document.querySelectorAll("button.copy").forEach(function (btn) {
+  btn.addEventListener("click", async function () {
+    const text = document.getElementById(btn.dataset.target).textContent;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    btn.textContent = "Copied!";
+    setTimeout(function () { btn.textContent = "Copy"; }, 1500);
+  });
+});
+</script>
+</body>
+</html>
